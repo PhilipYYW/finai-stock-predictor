@@ -5,13 +5,13 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from tqdm import tqdm
 import os
 
-# ── 設定區 ──────────────────────────────────────────────
+# ── Configuration ────────────────────────────────────────
 INPUT_PATH  = "data/raw_news.csv"
 OUTPUT_PATH = "data/news_with_sentiment.csv"
 MODEL_NAME  = "ProsusAI/finbert"
-BATCH_SIZE  = 16          # RTX 3060 6GB 跑 16 很穩，可調高到 32
+BATCH_SIZE  = 16          # Stable for RTX 3060 6GB, can increase to 32
 MAX_LENGTH  = 512
-# ────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -23,21 +23,21 @@ LABEL_MAP = {
 
 
 def load_model():
-    """載入 FinBERT tokenizer 與模型"""
-    print(f"🔧 載入 FinBERT（{MODEL_NAME}）...")
-    print(f"⚡ 使用裝置：{DEVICE.upper()}")
+    """Load FinBERT tokenizer and model"""
+    print(f"Loading FinBERT ({MODEL_NAME})...")
+    print(f"Device: {DEVICE.upper()}")
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
     model.to(DEVICE)
     model.eval()
 
-    print("✅ 模型載入完成\n")
+    print("Model loaded successfully\n")
     return tokenizer, model
 
 
 def predict_batch(texts: list[str], tokenizer, model) -> list[dict]:
-    """對一個 batch 的文字做情緒預測"""
+    """Run sentiment prediction on a batch of texts"""
     inputs = tokenizer(
         texts,
         padding=True,
@@ -50,7 +50,7 @@ def predict_batch(texts: list[str], tokenizer, model) -> list[dict]:
         outputs = model(**inputs)
         probs = torch.softmax(outputs.logits, dim=-1).cpu()
 
-    # FinBERT 輸出順序：positive / negative / neutral
+    # FinBERT output order: positive / negative / neutral
     labels = ["positive", "negative", "neutral"]
     results = []
     for prob in probs:
@@ -67,14 +67,14 @@ def predict_batch(texts: list[str], tokenizer, model) -> list[dict]:
 
 
 def score_dataframe(df: pd.DataFrame, tokenizer, model) -> pd.DataFrame:
-    """對整個 DataFrame 做情緒分析"""
-    # 合併 headline + summary 當輸入文字（給模型更多上下文）
+    """Run sentiment analysis on the entire DataFrame"""
+    # Combine headline + summary for richer context
     texts = (df["headline"] + ". " + df["summary"].fillna("")).tolist()
 
     all_results = []
     batches = [texts[i:i+BATCH_SIZE] for i in range(0, len(texts), BATCH_SIZE)]
 
-    for batch in tqdm(batches, desc="FinBERT 分析中"):
+    for batch in tqdm(batches, desc="Running FinBERT"):
         results = predict_batch(batch, tokenizer, model)
         all_results.extend(results)
 
@@ -83,34 +83,35 @@ def score_dataframe(df: pd.DataFrame, tokenizer, model) -> pd.DataFrame:
 
 
 def save(df: pd.DataFrame, path: str):
+    """Save results to CSV"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     df.to_csv(path, index=False, encoding="utf-8-sig")
-    print(f"💾 已儲存至 {path}")
+    print(f"Saved to {path}")
 
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  FinBERT 情緒分析")
+    print("  FinBERT Sentiment Scorer")
     print("=" * 50)
 
-    # 讀取爬蟲輸出
+    # Load crawler output
     if not os.path.exists(INPUT_PATH):
-        print(f"❌ 找不到 {INPUT_PATH}，請先執行 crawler/news_spider.py")
+        print(f"ERROR: {INPUT_PATH} not found. Please run crawler/news_spider.py first.")
         exit(1)
 
     df = pd.read_csv(INPUT_PATH)
-    print(f"📂 讀取 {len(df)} 筆新聞\n")
+    print(f"Loaded {len(df)} articles\n")
 
-    # 載入模型並分析
+    # Load model and run analysis
     tokenizer, model = load_model()
     df_scored = score_dataframe(df, tokenizer, model)
 
-    # 儲存結果
+    # Save results
     save(df_scored, OUTPUT_PATH)
 
-    # 預覽結果
-    print(f"\n📊 情緒分布：")
+    # Preview results
+    print(f"\nSentiment distribution:")
     print(df_scored["sentiment_label"].value_counts())
-    print(f"\n📊 資料預覽（前 5 筆）：")
+    print(f"\nPreview (first 5 rows):")
     print(df_scored[["ticker", "date", "headline", "sentiment_label", "sentiment_score"]].head())
-    print(f"\n✅ 完成！共 {len(df_scored)} 筆新聞已標注情緒")
+    print(f"\nDone! {len(df_scored)} articles scored.")

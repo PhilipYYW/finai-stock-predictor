@@ -17,8 +17,32 @@ import joblib
 import os
 
 # ── Configuration ────────────────────────────────────────
-TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
-           "TSLA", "META", "JPM", "BAC", "AMD"]
+import json as _json
+
+def _load_tickers():
+    """Load tickers from config.json, fallback to defaults"""
+    default = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
+               "TSLA", "META", "JPM", "BAC", "AMD"]
+    # Search for config.json relative to this script's location
+    script_dir  = os.path.dirname(os.path.abspath(__file__))
+    root_dir    = os.path.dirname(script_dir)   # one level up from dataset/
+    config_path = os.path.join(root_dir, "config.json")
+
+    print(f"  Looking for config.json at: {config_path}")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = _json.load(f)
+            tickers = cfg.get("tickers", default)
+            print(f"  Loaded {len(tickers)} tickers: {tickers}")
+            return tickers
+        except Exception as e:
+            print(f"  Warning: could not load config.json ({e}), using defaults")
+    else:
+        print(f"  config.json not found, using defaults")
+    return default
+
+TICKERS = _load_tickers()
 
 REAL_SENTIMENT_PATH = "data/news_with_sentiment.csv"
 OUTPUT_PATH         = "data/dataset_historical.csv"

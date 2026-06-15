@@ -1,0 +1,40 @@
+{
+  "tickers": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "TSLA",
+    "META",
+    "JPM",
+    "BAC",
+    "AMD",
+    "MRVL"
+  ],
+  "active_tickers": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "TSLA",
+    "META",
+    "JPM",
+    "BAC",
+    "AMD",
+    "MRVL"
+  ],
+  "ticker_names": {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "GOOGL": "Alphabet (Google)",
+    "AMZN": "Amazon",
+    "NVDA": "Nvidia",
+    "TSLA": "Tesla",
+    "META": "Meta",
+    "JPM": "JPMorgan",
+    "BAC": "Bank of America",
+    "AMD": "AMD"
+  }
+}

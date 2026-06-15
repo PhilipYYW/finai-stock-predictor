@@ -7,8 +7,30 @@ import time
 import os
 
 # ── Configuration ────────────────────────────────────────
-TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
-           "TSLA", "META", "JPM", "BAC", "AMD"]
+import json as _json
+
+def _load_tickers():
+    default = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
+               "TSLA", "META", "JPM", "BAC", "AMD"]
+    script_dir  = os.path.dirname(os.path.abspath(__file__))
+    root_dir    = os.path.dirname(script_dir)   # one level up from crawler/
+    config_path = os.path.join(root_dir, "config.json")
+
+    print(f"  Looking for config.json at: {config_path}")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = _json.load(f)
+            tickers = cfg.get("tickers", default)
+            print(f"  Loaded {len(tickers)} tickers: {tickers}")
+            return tickers
+        except Exception as e:
+            print(f"  Warning: {e}, using defaults")
+    else:
+        print(f"  config.json not found, using defaults")
+    return default
+
+TICKERS = _load_tickers()
 
 TICKER_QUERIES = {
     "AAPL":  "Apple AAPL stock earnings",
@@ -33,6 +55,10 @@ PAGE_SIZE    = 100
 def fetch_newsapi(ticker: str, query: str,
                   from_date: str, to_date: str) -> list[dict]:
     """Fetch news for one ticker from NewsAPI.org"""
+    # Use ticker itself as fallback query if not in TICKER_QUERIES
+    if not query or query == ticker:
+        query = f"{ticker} stock"
+
     url    = "https://newsapi.org/v2/everything"
     params = {
         "q":        query,

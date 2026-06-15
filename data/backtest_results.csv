@@ -1,0 +1,6 @@
+﻿strategy,total_return,sharpe,max_drawdown,win_rate,trades
+1. Sentiment Long/Short,288.477,11.015270000000001,-5.262,84.00999999999999,42
+2. Momentum + Sentiment,89.723,6.49816,-3.502,86.03,22
+3. Mean Reversion,-4.483,-0.10186000000000002,-6.086,26.669999999999998,1
+4. SNR + Sentiment,23.582,4.29293,-0.558,88.67,11
+Buy & Hold,10.99,1.3132,-15.04,0.0,1

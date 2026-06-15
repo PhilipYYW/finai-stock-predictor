@@ -32,7 +32,8 @@ def _load_tickers():
 
 TICKERS = _load_tickers()
 
-TICKER_QUERIES = {
+# Default curated queries for known tickers
+_DEFAULT_QUERIES = {
     "AAPL":  "Apple AAPL stock earnings",
     "MSFT":  "Microsoft MSFT stock earnings",
     "GOOGL": "Google Alphabet GOOGL stock",
@@ -44,6 +45,37 @@ TICKER_QUERIES = {
     "BAC":   "Bank of America BAC stock",
     "AMD":   "AMD semiconductor stock",
 }
+
+def _build_ticker_queries(tickers: list) -> dict:
+    """
+    Build search queries for all tickers.
+    Use curated query if available, otherwise auto-generate from
+    company name in config.json or fall back to "{TICKER} stock".
+    """
+    # Load company names from config.json
+    script_dir  = os.path.dirname(os.path.abspath(__file__))
+    root_dir    = os.path.dirname(script_dir)
+    config_path = os.path.join(root_dir, "config.json")
+    ticker_names = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = _json.load(f)
+            ticker_names = cfg.get("ticker_names", {})
+        except Exception:
+            pass
+
+    queries = {}
+    for t in tickers:
+        if t in _DEFAULT_QUERIES:
+            queries[t] = _DEFAULT_QUERIES[t]
+        elif t in ticker_names and ticker_names[t]:
+            queries[t] = f"{ticker_names[t]} {t} stock earnings"
+        else:
+            queries[t] = f"{t} stock earnings"
+    return queries
+
+TICKER_QUERIES = _build_ticker_queries(TICKERS)
 
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "f3829837585746d3a4a4b5d5b1a4130a")
 OUTPUT_PATH  = "data/raw_news.csv"

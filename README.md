@@ -29,11 +29,7 @@ Streamlit Dashboard           ← real-time signals + heatmap + analysis
 
 ## 🖥️ Dashboard Preview
 
-| Page | Content |
-|------|---------|
-| **Dashboard** | Live signals for all stocks · Sentiment heatmap · Pipeline controls |
-| **Analysis** | Backtest results · XGBoost vs LSTM comparison |
-| **Deep Dive** | Individual stock: price chart · RSI · sentiment · prediction gauge |
+![Dashboard](assets/dashboard.png)
 
 ---
 

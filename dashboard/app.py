@@ -5,822 +5,816 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import joblib
-import json
-import os
-import sys
-import subprocess
-import threading
-import time
+import joblib, json, os, sys, subprocess, time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from dataset.build_historical_dataset import FEATURE_COLS_HIST, LABEL_COLS
 
-st.set_page_config(
-    page_title="FinAI Stock Predictor",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="FinAI", page_icon="📈",
+                   layout="wide", initial_sidebar_state="collapsed")
 
 MODEL_DIR   = "models"
 DATA_DIR    = "data"
 CONFIG_PATH = "config.json"
 HIST_FEAT   = FEATURE_COLS_HIST + ["ticker_enc"]
 
-COLORS = {
-    "positive": "#00C896",
-    "negative": "#FF4B4B",
-    "neutral":  "#8E9AAF",
-    "bg":       "#0E1117",
-    "card":     "#1E2130",
-    "teal":     "#00B4D8",
-    "orange":   "#FF9F1C",
-    "purple":   "#A78BFA",
+C = {
+    "bg":"#080D18","card":"#0F1724","card2":"#162034",
+    "border":"#1C2E45","border2":"#243852",
+    "teal":"#00D4FF","green":"#00E5A0","red":"#FF4560",
+    "orange":"#FF9F1C","purple":"#A78BFA","yellow":"#FFD60A",
+    "text":"#E2E8F0","sub":"#5A7A9A","muted":"#2E4A6A",
 }
 
-st.markdown("""
+st.markdown(f"""
 <style>
-.signal-card {
-    background: #1E2130; border-radius: 12px; padding: 16px;
-    text-align: center; margin-bottom: 8px; border: 1px solid #2D3250;
-}
-.signal-card .ticker { font-size: 18px; font-weight: 700; color: #fff; }
-.signal-card .signal { font-size: 22px; font-weight: 800; margin: 6px 0; }
-.signal-card .prob   { font-size: 13px; color: #8E9AAF; margin: 0; }
-.signal-card .sent   { font-size: 12px; margin-top: 4px; }
-.long  { color: #00C896; }
-.short { color: #FF4B4B; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+*, html, body {{ font-family:'Inter',sans-serif !important; }}
+.stApp {{ background:{C['bg']} !important; }}
+#MainMenu,footer,header {{ visibility:hidden; }}
+/* Streamlit's actual content container */
+.block-container {{
+    padding: 2rem 4rem 4rem 4rem !important;
+    max-width: 1400px !important;
+    margin: 0 auto !important;
+}}
+
+/* Fallback page wrap */
+.page-wrap {{ display: contents; }}
+
+/* NAV */
+.topbar {{
+    background:{C['card']}; border-bottom:1px solid {C['border']};
+    padding:0 4rem; height:56px; display:flex;
+    align-items:center; justify-content:space-between;
+    position:sticky; top:0; z-index:999;
+}}
+.logo {{ font-size:16px; font-weight:800; color:{C['teal']}; letter-spacing:1px; }}
+.logo span {{ color:{C['text']}; font-weight:400; }}
+
+/* Apple-style pill nav — override Streamlit buttons */
+div[data-testid="column"]:has(button[key^="nav_"]) button {{
+    background: transparent !important;
+    border: none !important;
+    color: {C['sub']} !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    padding: 6px 16px !important;
+    transition: all 0.15s !important;
+    box-shadow: none !important;
+}}
+div[data-testid="column"]:has(button[key^="nav_"]) button:hover {{
+    background: {C['card2']} !important;
+    color: {C['text']} !important;
+}}
+
+/* Streamlit button style overrides */
+.stButton > button {{
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: all 0.15s !important;
+}}
+.stButton > button[kind="primary"] {{
+    background: {C['teal']} !important;
+    color: {C['bg']} !important;
+    border: none !important;
+    font-weight: 600 !important;
+}}
+.stButton > button[kind="secondary"] {{
+    background: transparent !important;
+    border: 1px solid {C['border']} !important;
+    color: {C['sub']} !important;
+}}
+.stButton > button[kind="secondary"]:hover {{
+    border-color: {C['teal']} !important;
+    color: {C['text']} !important;
+    background: {C['card2']} !important;
+}}
+
+/* Expander */
+details summary {{
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: {C['sub']} !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.8px !important;
+}}
+details summary:hover {{ color: {C['text']} !important; }}
+details {{ border: none !important; background: transparent !important; }}
+
+/* Checkbox */
+.stCheckbox label {{
+    font-size: 13px !important;
+    color: {C['text']} !important;
+}}
+.stCheckbox label span {{ font-weight: 500 !important; }}
+
+/* Selectbox */
+.stSelectbox label {{ display: none !important; }}
+.stSelectbox > div > div {{
+    background: {C['card2']} !important;
+    border: 1px solid {C['border']} !important;
+    border-radius: 8px !important;
+    color: {C['text']} !important;
+    font-size: 13px !important;
+}}
+
+/* Input */
+.stTextInput > div > div {{
+    background: {C['card2']} !important;
+    border: 1px solid {C['border']} !important;
+    border-radius: 8px !important;
+    color: {C['text']} !important;
+    font-size: 13px !important;
+}}
+
+/* Metrics */
+[data-testid="stMetric"] {{
+    background: {C['card']} !important;
+    border: 1px solid {C['border']} !important;
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+}}
+
+/* Progress bar */
+.stProgress > div > div {{
+    background: {C['teal']} !important;
+    border-radius: 4px !important;
+}}
+.stProgress > div {{
+    background: {C['border']} !important;
+    border-radius: 4px !important;
+}}
+
+/* Dataframe */
+[data-testid="stDataFrame"] {{
+    background: {C['card']} !important;
+    border: 1px solid {C['border']} !important;
+    border-radius: 10px !important;
+}}
+
+/* Warning/Info/Success boxes */
+.stAlert {{
+    border-radius: 8px !important;
+    font-size: 13px !important;
+}}
+
+/* Caption */
+.stCaption {{ color: {C['sub']} !important; font-size: 11px !important; }}
+
+/* Radio */
+.stRadio > div {{
+    gap: 4px !important;
+}}
+.stRadio label {{
+    background: {C['card2']} !important;
+    border: 1px solid {C['border']} !important;
+    border-radius: 6px !important;
+    padding: 4px 12px !important;
+    font-size: 12px !important;
+    color: {C['sub']} !important;
+    transition: all 0.15s !important;
+}}
+.stRadio label:has(input:checked) {{
+    background: {C['muted']} !important;
+    border-color: {C['teal']} !important;
+    color: {C['teal']} !important;
+}}
+
+/* PAGE LAYOUT */
+.page {{ display:flex; height:calc(100vh - 52px); overflow:hidden; }}
+.sidebar {{
+    width:260px; min-width:260px; background:{C['card']};
+    border-right:1px solid {C['border']}; overflow-y:auto;
+    padding:20px 16px; display:flex; flex-direction:column; gap:4px;
+}}
+.content {{ flex:1; overflow-y:auto; padding:24px 28px; }}
+
+/* CARDS */
+.card {{
+    background:{C['card']}; border:1px solid {C['border']};
+    border-radius:14px; padding:24px;
+}}
+.card-sm {{
+    background:{C['card']}; border:1px solid {C['border']};
+    border-radius:12px; padding:18px 20px;
+}}
+.card-accent {{
+    background:{C['card2']}; border:1px solid {C['border2']};
+    border-radius:12px; padding:18px 20px;
+}}
+
+/* KPI */
+.kpi {{ display:flex; flex-direction:column; gap:4px; }}
+.kpi-label {{ font-size:10px; font-weight:600; color:{C['sub']};
+              text-transform:uppercase; letter-spacing:1px; }}
+.kpi-value {{ font-size:28px; font-weight:800; color:{C['text']}; line-height:1; margin:6px 0 4px; }}
+.kpi-sub   {{ font-size:12px; font-weight:500; }}
+
+/* SIGNAL LIST */
+.sig-row {{
+    display:flex; align-items:center; padding:12px 16px;
+    border-radius:10px; margin-bottom:6px;
+    background:{C['card2']}; border:1px solid {C['border']};
+    cursor:pointer; transition:border-color 0.15s;
+}}
+.sig-row:hover {{ border-color:{C['teal']}; }}
+.sig-ticker {{ font-size:13px; font-weight:700; color:{C['text']}; width:48px; }}
+.sig-name   {{ font-size:11px; color:{C['sub']}; flex:1; }}
+.badge-long  {{ background:rgba(0,229,160,.12); color:{C['green']};
+               border:1px solid rgba(0,229,160,.25); padding:2px 8px;
+               border-radius:4px; font-size:11px; font-weight:700; }}
+.badge-short {{ background:rgba(255,69,96,.12);  color:{C['red']};
+               border:1px solid rgba(255,69,96,.25);  padding:2px 8px;
+               border-radius:4px; font-size:11px; font-weight:700; }}
+.badge-pend  {{ background:rgba(90,122,154,.10); color:{C['sub']};
+               border:1px solid {C['muted']}; padding:2px 8px;
+               border-radius:4px; font-size:11px; }}
+.sig-prob {{ font-size:11px; color:{C['sub']}; width:72px; text-align:right; }}
+.sig-sent {{ font-size:11px; font-weight:600; width:52px; text-align:right; }}
+
+/* SECTION TITLE */
+.sec {{ font-size:11px; font-weight:700; color:{C['sub']};
+        text-transform:uppercase; letter-spacing:1px;
+        margin-bottom:14px; margin-top:4px; }}
+
+/* TICKER STRIP */
+.tstrip {{
+    display:flex; gap:36px; padding:12px 4rem;
+    background:{C['card']}; border-bottom:1px solid {C['border']};
+    overflow-x:auto; scrollbar-width:none;
+}}
+.titem {{ display:flex; flex-direction:column; min-width:72px; }}
+.tsym  {{ font-size:10px; font-weight:700; color:{C['sub']}; letter-spacing:.5px; }}
+.tprc  {{ font-size:14px; font-weight:700; color:{C['text']}; }}
+.tup   {{ font-size:10px; color:{C['green']}; font-weight:600; }}
+.tdn   {{ font-size:10px; color:{C['red']};   font-weight:600; }}
+
+/* SIDEBAR NAV ITEM */
+.snav {{
+    display:flex; align-items:center; gap:10px; padding:9px 12px;
+    border-radius:8px; margin-bottom:2px; cursor:pointer;
+    font-size:13px; font-weight:500; color:{C['sub']};
+    border:1px solid transparent; transition:all 0.15s;
+}}
+.snav.active {{
+    background:{C['card2']}; color:{C['teal']};
+    border-color:{C['border2']};
+}}
+.snav:hover {{ color:{C['text']}; background:{C['card2']}; }}
+
+/* SETTINGS FORM */
+.settings-section {{ margin-bottom:24px; }}
+
+/* News */
+.nitem {{ padding:10px 0; border-bottom:1px solid {C['border']}; }}
+.ndate {{ font-size:10px; color:{C['sub']}; }}
+.nhead {{ font-size:12px; color:{C['text']}; line-height:1.4; margin:3px 0; }}
+
+/* Divider */
+.hdiv {{ height:1px; background:{C['border']}; margin:16px 0; }}
+
+section[data-testid="stSidebar"] {{ display:none !important; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Config helpers ────────────────────────────────────────
-def load_config() -> dict:
-    default = {
-        "tickers": ["AAPL","MSFT","GOOGL","AMZN","NVDA",
-                    "TSLA","META","JPM","BAC","AMD"],
-        "active_tickers": ["AAPL","MSFT","GOOGL","AMZN","NVDA",
-                           "TSLA","META","JPM","BAC","AMD"],
-        "ticker_names": {}
-    }
+# ── Helpers ───────────────────────────────────────────────
+def load_config():
+    d = {"tickers":["AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","META","JPM","BAC","AMD"],
+         "active_tickers":["AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","META","JPM","BAC","AMD"],
+         "ticker_names":{"AAPL":"Apple","MSFT":"Microsoft","GOOGL":"Alphabet",
+                         "AMZN":"Amazon","NVDA":"Nvidia","TSLA":"Tesla",
+                         "META":"Meta","JPM":"JPMorgan","BAC":"Bank of America","AMD":"AMD"}}
     if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r") as f:
-            return {**default, **json.load(f)}
-    return default
+        with open(CONFIG_PATH) as f: return {**d,**json.load(f)}
+    return d
 
-def save_config(cfg: dict):
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(cfg, f, indent=2)
+def save_config(c):
+    with open(CONFIG_PATH,"w") as f: json.dump(c,f,indent=2)
 
-# ── Data loaders ──────────────────────────────────────────
-@st.cache_data
-def load_sentiment():
-    path = f"{DATA_DIR}/news_with_sentiment.csv"
-    if not os.path.exists(path): return pd.DataFrame()
-    df = pd.read_csv(path)
-    df["date"] = pd.to_datetime(df["date"])
-    return df
-
-@st.cache_data
-def load_historical():
-    path = f"{DATA_DIR}/dataset_historical.csv"
-    if not os.path.exists(path): return pd.DataFrame()
-    df = pd.read_csv(path)
-    df["date"] = pd.to_datetime(df["date"])
-    return df
-
-@st.cache_data
-def load_backtest():
-    path = f"{DATA_DIR}/backtest_results.csv"
-    if not os.path.exists(path): return pd.DataFrame()
-    return pd.read_csv(path)
-
-@st.cache_resource
-def load_xgb_models():
-    models = {}
-    for lc in LABEL_COLS:
-        mp = f"{MODEL_DIR}/xgb_v2_{lc}.pkl"
-        sp = f"{MODEL_DIR}/scaler_v2_{lc}.pkl"
-        if os.path.exists(mp) and os.path.exists(sp):
-            models[lc] = {"model": joblib.load(mp), "scaler": joblib.load(sp)}
-    return models
-
-def sentiment_emoji(label):
-    return {"positive":"🟢","negative":"🔴","neutral":"⚪"}.get(label,"⚪")
-
-def plotly_dark(fig, height=400, title=""):
-    fig.update_layout(
-        height=height, title=title,
-        paper_bgcolor=COLORS["bg"], plot_bgcolor=COLORS["bg"],
-        font_color="white",
-        legend=dict(bgcolor="rgba(0,0,0,0)"),
-    )
-    fig.update_xaxes(gridcolor="#2D3250")
-    fig.update_yaxes(gridcolor="#2D3250")
-    return fig
-
-# ── Load config ───────────────────────────────────────────
 cfg = load_config()
 
-# ════════════════════════════════════════════════════════════
-# SIDEBAR — Ticker Management
-# ════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.markdown("## 📈 FinAI Predictor")
-    st.caption("AI-Powered Financial News Analysis")
-    st.divider()
+@st.cache_data(ttl=300)
+def load_sentiment():
+    p=f"{DATA_DIR}/news_with_sentiment.csv"
+    if not os.path.exists(p): return pd.DataFrame()
+    df=pd.read_csv(p); df["date"]=pd.to_datetime(df["date"]); return df
 
-    page = st.radio("Navigation", [
-        "📊 Market Overview",
-        "🔍 Stock Deep Dive",
-        "🤖 Model Performance",
-        "📈 Backtest Results",
-    ], label_visibility="collapsed")
+@st.cache_data(ttl=300)
+def load_historical():
+    p=f"{DATA_DIR}/dataset_historical.csv"
+    if not os.path.exists(p): return pd.DataFrame()
+    df=pd.read_csv(p); df["date"]=pd.to_datetime(df["date"]); return df
 
-    st.divider()
+@st.cache_data(ttl=300)
+def load_backtest():
+    p=f"{DATA_DIR}/backtest_results.csv"
+    if not os.path.exists(p): return pd.DataFrame()
+    return pd.read_csv(p)
 
-    # ── Ticker Management ─────────────────────────────────
-    st.markdown("### 🏢 Manage Stocks")
+@st.cache_resource
+def load_models():
+    m={}
+    for lc in LABEL_COLS:
+        mp=f"{MODEL_DIR}/xgb_v2_{lc}.pkl"; sp=f"{MODEL_DIR}/scaler_v2_{lc}.pkl"
+        if os.path.exists(mp) and os.path.exists(sp):
+            m[lc]={"model":joblib.load(mp),"scaler":joblib.load(sp)}
+    return m
 
-    # Show checkboxes for all tickers
-    all_tickers     = cfg["tickers"]
-    active_tickers  = cfg["active_tickers"]
-    ticker_names    = cfg.get("ticker_names", {})
+def get_prob(hist_df, models, ticker, lc="label_1d"):
+    m=models.get(lc)
+    if not m or hist_df.empty: return None
+    row=hist_df[hist_df["ticker"]==ticker]
+    if row.empty: return None
+    row=row.sort_values("date").iloc[-1:]
+    X=m["scaler"].transform(row[HIST_FEAT].fillna(0))
+    return float(m["model"].predict_proba(X)[0,1])
 
-    new_active = []
-    for t in all_tickers:
-        name    = ticker_names.get(t, "")
-        label   = f"**{t}**  {name}" if name else f"**{t}**"
-        checked = t in active_tickers
-        if st.checkbox(label, value=checked, key=f"chk_{t}"):
-            new_active.append(t)
+def sent_col(s):
+    return C["green"] if s>0.1 else C["red"] if s<-0.1 else C["sub"]
 
-    # Save if changed
-    if set(new_active) != set(active_tickers):
-        cfg["active_tickers"] = new_active
-        save_config(cfg)
-        st.rerun()
+def dark_chart(fig, h=340):
+    fig.update_layout(height=h, paper_bgcolor=C["card"], plot_bgcolor=C["card"],
+                      font_color=C["text"], showlegend=True,
+                      legend=dict(bgcolor="rgba(0,0,0,0)", font_size=11),
+                      margin=dict(l=0,r=0,t=24,b=0))
+    fig.update_xaxes(gridcolor=C["border"], showgrid=True)
+    fig.update_yaxes(gridcolor=C["border"], showgrid=True)
+    return fig
 
-    st.divider()
+# ── Session state ─────────────────────────────────────────
+for k,v in [("page","Dashboard"),("ticker","AAPL")]:
+    if k not in st.session_state: st.session_state[k]=v
 
-    # ── Add new ticker ────────────────────────────────────
-    st.markdown("### ➕ Add New Stock")
-    with st.form("add_ticker_form", clear_on_submit=True):
-        new_ticker = st.text_input(
-            "Ticker Symbol",
-            placeholder="e.g. NFLX",
-            help="Enter US stock ticker (e.g. NFLX, BABA, INTC)"
-        ).upper().strip()
-        new_name = st.text_input(
-            "Company Name (optional)",
-            placeholder="e.g. Netflix"
-        ).strip()
-        submitted = st.form_submit_button("Add Stock", use_container_width=True)
+sent_df  = load_sentiment()
+hist_df  = load_historical()
+bt_df    = load_backtest()
+xgb_mdls = load_models()
+TICKERS  = cfg["active_tickers"] or cfg["tickers"]
 
-        if submitted and new_ticker:
-            if new_ticker in cfg["tickers"]:
-                st.warning(f"{new_ticker} already in list")
-            elif len(new_ticker) > 6 or not new_ticker.isalpha():
-                st.error("Invalid ticker format")
-            else:
-                cfg["tickers"].append(new_ticker)
-                cfg["active_tickers"].append(new_ticker)
-                if new_name:
-                    cfg["ticker_names"][new_ticker] = new_name
-                save_config(cfg)
-                st.success(f"✅ {new_ticker} added!")
-                st.info(
-                    f"⚠️ To get predictions for {new_ticker}, "
-                    f"re-run:\n"
-                    f"1. `crawler/news_spider.py`\n"
-                    f"2. `nlp/finbert_scorer.py`\n"
-                    f"3. `dataset/build_historical_dataset.py`\n"
-                    f"4. `models/train_xgboost_v2.py`"
-                )
-                st.rerun()
+# ── TOP BAR ───────────────────────────────────────────────
+st.markdown(f"""
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M3 17l4-8 4 4 4-6 4 10" stroke="#00D4FF" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="20" cy="5" r="2" fill="#00E5A0"/>
+    </svg>
+    <div class="logo">FinAI <span>Stock Predictor</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:20px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="width:6px;height:6px;background:#00E5A0;border-radius:50%;display:inline-block"></span>
+      <span style="font-size:11px;color:{C['sub']}">Live</span>
+    </div>
+    <span style="font-size:11px;color:{C['border2']}">|</span>
+    <span style="font-size:11px;color:{C['sub']}">{len(TICKERS)} stocks</span>
+    <span style="font-size:11px;color:{C['border2']}">|</span>
+    <span style="font-size:11px;color:{C['sub']}">{len(hist_df):,} rows</span>
+    <span style="font-size:11px;color:{C['border2']}">|</span>
+    <span style="font-size:11px;color:{C['sub']}">FinBERT · XGBoost · LSTM</span>
+  </div>
+</div>""", unsafe_allow_html=True)
 
-    # ── Remove ticker ─────────────────────────────────────
-    st.divider()
-    st.markdown("### 🗑️ Remove Stock")
-    removable = [t for t in cfg["tickers"]
-                 if t not in ["AAPL","MSFT","GOOGL","AMZN","NVDA",
-                              "TSLA","META","JPM","BAC","AMD"]]
-    if removable:
-        to_remove = st.selectbox("Select to remove", removable)
-        if st.button("Remove", type="secondary", use_container_width=True):
-            cfg["tickers"].remove(to_remove)
-            if to_remove in cfg["active_tickers"]:
-                cfg["active_tickers"].remove(to_remove)
-            cfg["ticker_names"].pop(to_remove, None)
-            save_config(cfg)
-            st.success(f"✅ {to_remove} removed")
-            st.rerun()
-    else:
-        st.caption("Add custom stocks above to enable removal\n(Default 10 stocks are protected)")
+# ── TICKER STRIP ──────────────────────────────────────────
+if not hist_df.empty:
+    lp = hist_df[hist_df["ticker"].isin(TICKERS)].sort_values("date").groupby("ticker").last().reset_index()
+    items="".join([f"""
+<div class="titem">
+  <span class="tsym">{r['ticker']}</span>
+  <span class="tprc">${r['close']:.2f}</span>
+  <span class="{'tup' if (r.get('ret_1d',0) or 0)>=0 else 'tdn'}">
+    {'▲' if (r.get('ret_1d',0) or 0)>=0 else '▼'} {abs((r.get('ret_1d',0) or 0)*100):.2f}%
+  </span>
+</div>""" for _,r in lp.iterrows()])
+    st.markdown(f'<div class="tstrip">{items}</div>', unsafe_allow_html=True)
 
-    # ── Run Pipeline ──────────────────────────────────────
-    st.divider()
-    st.markdown("### ⚙️ Update Data & Models")
-    st.caption("Re-fetches news, re-scores sentiment, rebuilds dataset and retrains models.")
+# ── NAV BUTTONS — Apple pill style ───────────────────────
+pages = [("Dashboard","dashboard"),("Analysis","analysis"),("Deep Dive","deepdive")]
+page_labels = {
+    "Dashboard": "Dashboard",
+    "Analysis":  "Analysis",
+    "Deep Dive": "Deep Dive",
+}
 
-    PIPELINE_STEPS = [
-        ("📰 Crawling news...",       "crawler/news_spider.py"),
-        ("🧠 Running FinBERT...",     "nlp/finbert_scorer.py"),
-        ("📊 Building dataset...",    "dataset/build_historical_dataset.py"),
-        ("🤖 Training XGBoost...",    "models/train_xgboost_v2.py"),
-    ]
+# Apple-style segmented control via columns
+nav_cols = st.columns([1,1,1,4])
+for i,(p,_) in enumerate(pages):
+    with nav_cols[i]:
+        is_active = st.session_state.page == p
+        # Render active state via HTML overlay trick
+        st.markdown(f"""
+<style>
+div[data-testid="column"]:nth-child({i+1}) button {{
+    background: {"rgba(0,212,255,0.12)" if is_active else "transparent"} !important;
+    border: {"1px solid rgba(0,212,255,0.4)" if is_active else "1px solid transparent"} !important;
+    color: {"#00D4FF" if is_active else "#5A7A9A"} !important;
+    font-weight: {"600" if is_active else "400"} !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+    transition: all 0.2s !important;
+}}
+div[data-testid="column"]:nth-child({i+1}) button:hover {{
+    color: #E2E8F0 !important;
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(255,255,255,0.1) !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+        if st.button(p, key=f"nav_{p}", use_container_width=True):
+            st.session_state.page=p; st.rerun()
 
-    # ── Session state init ────────────────────────────────
-    for key, val in [("pipeline_running", False),
-                     ("pipeline_step", 0),
-                     ("pipeline_log", []),
-                     ("pipeline_done", False),
-                     ("pipeline_error", "")]:
-        if key not in st.session_state:
-            st.session_state[key] = val
-
-    N_STEPS = len(PIPELINE_STEPS)
-
-    if st.button("🔄 Run Full Pipeline", type="primary",
-                 use_container_width=True):
-        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-        # Build progress UI directly in sidebar
-        prog_bar  = st.progress(0.0, text="Starting pipeline...")
-        step_slots = [st.empty() for _ in PIPELINE_STEPS]
-
-        # Init all steps as pending
-        for idx, (label, _) in enumerate(PIPELINE_STEPS):
-            step_slots[idx].markdown(
-                f"<div style='font-size:12px;color:#8E9AAF'>⬜ {label}</div>",
-                unsafe_allow_html=True)
-
-        log_lines = []
-        error_msg = ""
-
-        for idx, (label, script) in enumerate(PIPELINE_STEPS):
-            fraction = idx / len(PIPELINE_STEPS)
-            prog_bar.progress(fraction, text=f"Step {idx+1}/{len(PIPELINE_STEPS)}: {label}")
-
-            # Mark current step as running
-            step_slots[idx].markdown(
-                f"<div style='font-size:12px;color:#FF9F1C'>⏳ {label}</div>",
-                unsafe_allow_html=True)
-
-            log_lines.append(f"▶ {label}")
-            try:
-                result = subprocess.run(
-                    [sys.executable, script],
-                    capture_output=True, text=True,
-                    cwd=root, timeout=600
-                )
-                if result.returncode == 0:
-                    log_lines.append("  ✅ Done")
-                    step_slots[idx].markdown(
-                        f"<div style='font-size:12px;color:#00C896'>✅ {label}</div>",
-                        unsafe_allow_html=True)
-                else:
-                    err = result.stderr.strip().split("\n")[-1]
-                    log_lines.append(f"  ❌ {err}")
-                    step_slots[idx].markdown(
-                        f"<div style='font-size:12px;color:#FF4B4B'>❌ {label}</div>",
-                        unsafe_allow_html=True)
-                    error_msg = err
-                    break
-            except subprocess.TimeoutExpired:
-                log_lines.append("  ⏱️ Timeout")
-                step_slots[idx].markdown(
-                    f"<div style='font-size:12px;color:#FF4B4B'>⏱️ {label} (timeout)</div>",
-                    unsafe_allow_html=True)
-                error_msg = "Timeout"
-                break
-            except Exception as e:
-                log_lines.append(f"  ❌ {e}")
-                error_msg = str(e)
-                break
-
-        # Final state
-        if not error_msg:
-            prog_bar.progress(1.0, text="✅ All steps complete!")
-            st.success("✅ Pipeline complete! Refreshing data...")
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            time.sleep(1)
-            st.rerun()
-        else:
-            prog_bar.progress(
-                (idx) / len(PIPELINE_STEPS),
-                text=f"❌ Failed at step {idx+1}"
-            )
-            st.error(f"❌ Pipeline failed: {error_msg}")
-
-        with st.expander("View log"):
-            st.code("\n".join(log_lines), language=None)
-
-    with st.expander("Run individual steps"):
-        for label, script in PIPELINE_STEPS:
-            btn_label = label.split("...")[0].strip()
-            if st.button(btn_label, use_container_width=True, key=f"btn_{script}"):
-                root = os.path.abspath(
-                    os.path.join(os.path.dirname(__file__), ".."))
-                with st.spinner(f"Running {script}..."):
-                    result = subprocess.run(
-                        [sys.executable, script],
-                        capture_output=True, text=True,
-                        cwd=root, timeout=300
-                    )
-                if result.returncode == 0:
-                    st.success(f"✅ {btn_label} done!")
-                    st.cache_data.clear()
-                    st.cache_resource.clear()
-                else:
-                    err = result.stderr.strip().split("\n")[-1]
-                    st.error(f"❌ {err}")
-
-    st.divider()
-    if st.button("🗑️ Clear Cache & Reload", use_container_width=True):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.success("Cache cleared!")
-        st.rerun()
-    st.caption("Data: Yahoo Finance + NewsAPI")
-    st.caption("Model: FinBERT + XGBoost + LSTM")
-
-# Use active tickers for all pages
-TICKERS = cfg["active_tickers"] if cfg["active_tickers"] else cfg["tickers"]
+page = st.session_state.page
 
 # ════════════════════════════════════════════════════════════
-# PAGE 1 — Market Overview
+# DASHBOARD — Overview (left) + Settings (right sidebar)
 # ════════════════════════════════════════════════════════════
-if page == "📊 Market Overview":
-    st.title("📊 Market Overview")
-    st.caption(f"Showing {len(TICKERS)} stocks · XGBoost T+1 predictions · FinBERT sentiment")
+if page == "Dashboard":
+    st.markdown('<div class="page-wrap">', unsafe_allow_html=True)
 
-    sent_df = load_sentiment()
-    hist_df = load_historical()
-    models  = load_xgb_models()
-
-    if sent_df.empty:
-        st.warning("No sentiment data found. Run `nlp/finbert_scorer.py` first.")
-        st.stop()
-
-    # Filter to active tickers only
-    sent_df = sent_df[sent_df["ticker"].isin(TICKERS)]
-    hist_df = hist_df[hist_df["ticker"].isin(TICKERS)] if not hist_df.empty else hist_df
-
-    latest_sent = (sent_df.sort_values("date")
-                          .groupby("ticker").last().reset_index())
+    STEPS=[("📰 News","crawler/news_spider.py"),
+           ("🧠 FinBERT","nlp/finbert_scorer.py"),
+           ("📊 Dataset","dataset/build_historical_dataset.py"),
+           ("🤖 XGBoost","models/train_xgboost_v2.py")]
 
     # ── KPI Row ───────────────────────────────────────────
-    avg_sent = latest_sent["sentiment_score"].mean()
-    n_pos    = (latest_sent["sentiment_label"]=="positive").sum()
-    n_neg    = (latest_sent["sentiment_label"]=="negative").sum()
-    n_neu    = (latest_sent["sentiment_label"]=="neutral").sum()
+    latest_sent=pd.DataFrame()
+    if not sent_df.empty:
+        latest_sent=sent_df[sent_df["ticker"].isin(TICKERS)].sort_values("date").groupby("ticker").last().reset_index()
 
-    k1,k2,k3,k4 = st.columns(4)
-    k1.metric("Market Sentiment", f"{avg_sent:+.3f}",
-              "🟢 Bullish" if avg_sent > 0 else "🔴 Bearish")
-    k2.metric("🟢 Bullish", f"{n_pos} stocks")
-    k3.metric("🔴 Bearish", f"{n_neg} stocks")
-    k4.metric("⚪ Neutral",  f"{n_neu} stocks")
+    avg_sent=latest_sent["sentiment_score"].mean() if not latest_sent.empty else 0
+    n_long=sum(1 for t in TICKERS if (get_prob(hist_df,xgb_mdls,t) or 0.5)>0.5)
+    n_short=len(TICKERS)-n_long
 
-    st.divider()
-    st.subheader("Latest Signals")
-
-    # Get XGBoost predictions for tickers that have historical data
-    tickers_with_data = set(hist_df["ticker"].unique()) if not hist_df.empty else set()
-    latest_hist = pd.DataFrame()
-    if not hist_df.empty:
-        latest_hist = (hist_df[hist_df["ticker"].isin(TICKERS)]
-                       .sort_values("date")
-                       .groupby("ticker").last().reset_index())
-        xgb_1d = models.get("label_1d")
-        if xgb_1d and not latest_hist.empty:
-            X    = xgb_1d["scaler"].transform(latest_hist[HIST_FEAT].fillna(0))
-            prob = xgb_1d["model"].predict_proba(X)[:,1]
-            latest_hist["prob_up"] = prob
-
-    # Build per-ticker sentiment lookup
-    sent_lookup = (latest_sent.set_index("ticker")[
-                   ["sentiment_label","sentiment_score"]].to_dict("index"))
-
-    # Signal cards — dynamic column count
-    n_cols = min(5, len(TICKERS))
-    cols   = st.columns(n_cols)
-
-    for i, ticker_sym in enumerate(TICKERS):
-        col  = cols[i % n_cols]
-        name = cfg["ticker_names"].get(ticker_sym, "")
-        has_data = ticker_sym in tickers_with_data
-
-        # Get sentiment (real or neutral)
-        sent_info = sent_lookup.get(ticker_sym, {})
-        sent_l    = sent_info.get("sentiment_label", "neutral")
-        sent_s    = float(sent_info.get("sentiment_score", 0.0))
-        sent_e    = sentiment_emoji(sent_l)
-
-        if not has_data:
-            # Pending card for newly added tickers
-            with col:
-                st.markdown(f"""
-<div class="signal-card">
-  <div class="ticker">{ticker_sym}</div>
-  {"<div style='font-size:11px;color:#8E9AAF;margin-bottom:4px'>" + name + "</div>" if name else ""}
-  <div class="signal" style="color:#8E9AAF;font-size:16px">⏳ PENDING</div>
-  <div class="prob" style="margin-top:6px">No model data yet</div>
-  <div style="background:#2D3250;border-radius:4px;height:6px;margin:8px 0">
-    <div style="background:#8E9AAF;width:50%;height:6px;border-radius:4px"></div>
-  </div>
-  <div class="sent" style="color:#8E9AAF;font-size:11px">Re-run pipeline to activate</div>
-</div>
-""", unsafe_allow_html=True)
-            continue
-
-        # Get model prediction
-        hist_row = latest_hist[latest_hist["ticker"]==ticker_sym]
-        prob_up  = float(hist_row["prob_up"].values[0]) \
-                   if not hist_row.empty else 0.5
-        is_long  = prob_up > 0.5
-        sig_cls  = "long" if is_long else "short"
-        sig_txt  = "▲ LONG" if is_long else "▼ SHORT"
-        bar_pct  = int(prob_up * 100)
-        bar_col  = "#00C896" if is_long else "#FF4B4B"
-
+    k1,k2,k3,k4=st.columns(4)
+    for col,(lbl,val,sub,clr) in zip([k1,k2,k3,k4],[
+        ("Market Sentiment",f"{avg_sent:+.3f}","Bullish" if avg_sent>0 else "Bearish",C["green"] if avg_sent>0 else C["red"]),
+        ("Long Signals",str(n_long),f"of {len(TICKERS)} stocks",C["green"]),
+        ("Short Signals",str(n_short),f"of {len(TICKERS)} stocks",C["red"]),
+        ("Data Points",f"{len(hist_df):,}" if not hist_df.empty else "—","historical rows",C["teal"]),
+    ]):
         with col:
             st.markdown(f"""
-<div class="signal-card">
-  <div class="ticker">{ticker_sym}</div>
-  {"<div style='font-size:11px;color:#8E9AAF;margin-bottom:4px'>" + name + "</div>" if name else ""}
-  <div class="signal {sig_cls}">{sig_txt}</div>
-  <div class="prob">P(UP)={prob_up:.2f} | P(DN)={1-prob_up:.2f}</div>
-  <div style="background:#2D3250;border-radius:4px;height:6px;margin:8px 0">
-    <div style="background:{bar_col};width:{bar_pct}%;height:6px;border-radius:4px"></div>
-  </div>
-  <div class="sent">{sent_e} {sent_l.capitalize()} ({sent_s:+.2f})</div>
-</div>
-""", unsafe_allow_html=True)
-
-    st.divider()
-
-    # Heatmap — use dataset_historical.csv to include all tickers
-    st.subheader("Sentiment Heatmap — Last 20 Trading Days")
-    st.caption("🟢 Positive  ⬛ Neutral  🔴 Negative · Scores from FinBERT (real news) or proxy model")
-
-    # Use historical dataset which covers all tickers including new ones
-    hm_source = hist_df[hist_df["ticker"].isin(TICKERS)][
-        ["ticker", "date", "sentiment_score"]
-    ].copy() if not hist_df.empty else pd.DataFrame()
-
-    # Fall back to sentiment CSV if historical not available
-    if hm_source.empty and not sent_df.empty:
-        hm_source = sent_df[sent_df["ticker"].isin(TICKERS)][
-            ["ticker", "date", "sentiment_score"]
-        ].copy()
-
-    if not hm_source.empty:
-        hm_source["date"] = pd.to_datetime(hm_source["date"]).dt.strftime("%Y-%m-%d")
-
-        # Daily average per ticker
-        hm = (hm_source.groupby(["ticker", "date"])["sentiment_score"]
-                       .mean().reset_index())
-        hm_pivot = hm.pivot(index="ticker", columns="date",
-                            values="sentiment_score")
-
-        # Keep last 20 trading days, fill missing with 0
-        hm_pivot = hm_pivot.fillna(0).iloc[:, -20:]
-        hm_pivot.columns = [str(c)[:10] for c in hm_pivot.columns]
-
-        # Mark tickers with real news vs proxy model
-        real_tickers  = set(sent_df["ticker"].unique()) if not sent_df.empty else set()
-        ticker_labels = []
-        for t in hm_pivot.index:
-            label = t if t in real_tickers else f"{t} *"
-            ticker_labels.append(label)
-        hm_pivot.index = ticker_labels
-
-        fig_heat = px.imshow(
-            hm_pivot,
-            color_continuous_scale=[[0,"#FF4B4B"],[0.5,"#1E2130"],[1,"#00C896"]],
-            zmin=-1, zmax=1, aspect="auto", text_auto=".2f",
-        )
-        fig_heat.update_traces(textfont_size=9)
-        plotly_dark(fig_heat, height=max(300, len(TICKERS)*38))
-        st.plotly_chart(fig_heat, use_container_width=True)
-        st.caption("\* Sentiment estimated by proxy model (no real news data yet)")
-    else:
-        st.info("No sentiment data available.")
-
-
-# ════════════════════════════════════════════════════════════
-# PAGE 2 — Stock Deep Dive
-# ════════════════════════════════════════════════════════════
-elif page == "🔍 Stock Deep Dive":
-    st.title("🔍 Stock Deep Dive")
-
-    c1, c2 = st.columns([1,2])
-    ticker  = c1.selectbox("Ticker", TICKERS)
-    horizon = c2.selectbox("Prediction Horizon", [
-        "T+1 (Tomorrow)", "T+3 (3 Days)", "T+5 (5 Days)"])
-    horizon_map = {"T+1 (Tomorrow)":"label_1d",
-                   "T+3 (3 Days)":"label_3d",
-                   "T+5 (5 Days)":"label_5d"}
-    label_col = horizon_map[horizon]
-
-    sent_df = load_sentiment()
-    hist_df = load_historical()
-    models  = load_xgb_models()
-
-    if hist_df.empty:
-        st.warning("No historical data."); st.stop()
-
-    t_hist = hist_df[hist_df["ticker"]==ticker].sort_values("date")
-    t_sent = sent_df[sent_df["ticker"]==ticker].sort_values("date") \
-             if not sent_df.empty else pd.DataFrame()
-
-    # Check if ticker has model data
-    has_model_data = ticker in hist_df["ticker"].unique()
-
-    if not has_model_data:
-        st.warning(
-            f"⚠️ **{ticker}** has no historical model data yet.\n\n"
-            f"To generate predictions, re-run the pipeline:\n"
-            f"1. `python crawler/news_spider.py`\n"
-            f"2. `python nlp/finbert_scorer.py`\n"
-            f"3. `python dataset/build_historical_dataset.py`\n"
-            f"4. `python models/train_xgboost_v2.py`"
-        )
-
-    # Prediction banner
-    xgb_info = models.get(label_col)
-    if xgb_info and not t_hist.empty and has_model_data:
-        last_row = t_hist.iloc[-1:]
-        X        = xgb_info["scaler"].transform(
-                    last_row[HIST_FEAT].fillna(0))
-        prob_up  = xgb_info["model"].predict_proba(X)[0,1]
-        is_long  = prob_up > 0.5
-        signal   = "▲ LONG — Price likely to rise" if is_long \
-                   else "▼ SHORT — Price likely to fall"
-        color    = COLORS["positive"] if is_long else COLORS["negative"]
-        conf     = ("High"   if abs(prob_up-0.5)>0.15
-                    else "Medium" if abs(prob_up-0.5)>0.07
-                    else "Low")
-
-        st.markdown(f"""
-<div style="background:{color}22;border:1.5px solid {color};border-radius:10px;
-padding:16px 24px;margin-bottom:16px">
-  <span style="font-size:22px;font-weight:800;color:{color}">{signal}</span><br>
-  <span style="color:#ccc;font-size:14px">
-    {horizon} &nbsp;|&nbsp; P(UP)={prob_up:.3f} &nbsp;|&nbsp;
-    P(DOWN)={1-prob_up:.3f} &nbsp;|&nbsp; Confidence: {conf}
-  </span>
+<div class="card-sm kpi">
+  <div class="kpi-label">{lbl}</div>
+  <div class="kpi-value">{val}</div>
+  <div class="kpi-sub" style="color:{clr}">{sub}</div>
 </div>""", unsafe_allow_html=True)
 
-    # Chart
-    if not t_hist.empty:
-        fig = make_subplots(
-            rows=3, cols=1, shared_xaxes=True,
-            row_heights=[0.55,0.22,0.23],
-            subplot_titles=[f"{ticker} Price + SMA20",
-                            "FinBERT Sentiment Score","RSI (14)"],
-            vertical_spacing=0.06,
-        )
-        fig.add_trace(go.Scatter(
-            x=t_hist["date"], y=t_hist["close"],
-            name="Price", line=dict(color=COLORS["teal"],width=2)
-        ), row=1, col=1)
-        if "sma20" in t_hist.columns:
-            fig.add_trace(go.Scatter(
-                x=t_hist["date"], y=t_hist["sma20"],
-                name="SMA20", line=dict(color=COLORS["orange"],
-                                        width=1,dash="dash")
-            ), row=1, col=1)
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
 
-        sent_daily = t_hist[["date","sentiment_score"]].dropna()
-        bar_colors = [COLORS["positive"] if s>0 else COLORS["negative"]
-                      for s in sent_daily["sentiment_score"]]
-        fig.add_trace(go.Bar(
-            x=sent_daily["date"], y=sent_daily["sentiment_score"],
-            name="Sentiment", marker_color=bar_colors,
-        ), row=2, col=1)
-        fig.add_hline(y=0.1,  line_dash="dot",
-                      line_color="rgba(0,200,150,0.4)", row=2, col=1)
-        fig.add_hline(y=-0.1, line_dash="dot",
-                      line_color="rgba(255,75,75,0.4)",  row=2, col=1)
+    # ── Signal List + Heatmap (side by side, equal weight) ──
+    sig_col, heat_col = st.columns([1, 2], gap="large")
 
-        if "rsi14" in t_hist.columns:
-            fig.add_trace(go.Scatter(
-                x=t_hist["date"], y=t_hist["rsi14"],
-                name="RSI14", line=dict(color=COLORS["purple"],width=1.5)
-            ), row=3, col=1)
-            fig.add_hrect(y0=70, y1=100, line_width=0,
-                          fillcolor="#FF4B4B", opacity=0.08, row=3, col=1)
-            fig.add_hrect(y0=0,  y1=30,  line_width=0,
-                          fillcolor="#00C896", opacity=0.08, row=3, col=1)
-            fig.add_hline(y=70, line_dash="dash",
-                          line_color="#FF4B4B", row=3, col=1)
-            fig.add_hline(y=30, line_dash="dash",
-                          line_color="#00C896", row=3, col=1)
+    with sig_col:
+        st.markdown(f'<div class="sec">Latest Signals — T+1</div>', unsafe_allow_html=True)
+        real_tickers=set(sent_df["ticker"].unique()) if not sent_df.empty else set()
+        sent_lkp=latest_sent.set_index("ticker")[["sentiment_score"]].to_dict("index") if not latest_sent.empty else {}
 
-        plotly_dark(fig, height=720)
-        st.plotly_chart(fig, use_container_width=True)
+        for t in TICKERS:
+            prob=get_prob(hist_df,xgb_mdls,t)
+            nm=cfg["ticker_names"].get(t,"")
+            ss=float((sent_lkp.get(t,{}) or {}).get("sentiment_score",0))
+            sc=sent_col(ss)
+            pm="" if t in real_tickers else "*"
 
-    # Gauge
-    if xgb_info and not t_hist.empty and has_model_data:
-        st.subheader("Prediction Confidence")
-        fig_g = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=prob_up*100,
-            delta={"reference":50,"suffix":"%"},
-            title={"text":f"P(UP) — {horizon}","font":{"color":"white"}},
-            number={"suffix":"%","font":{"color":"white"}},
-            gauge={
-                "axis":{"range":[0,100],"tickcolor":"white",
-                        "tickfont":{"color":"white"}},
-                "bar":{"color":COLORS["teal"]},
-                "bgcolor":"#1E2130",
-                "bordercolor":"#2D3250",
-                "steps":[
-                    {"range":[0,40],  "color":"rgba(255,75,75,0.25)"},
-                    {"range":[40,60], "color":"rgba(142,154,175,0.15)"},
-                    {"range":[60,100],"color":"rgba(0,200,150,0.25)"},
-                ],
-                "threshold":{"line":{"color":"white","width":3},"value":50},
-            },
-        ))
-        fig_g.update_layout(height=280, paper_bgcolor=COLORS["bg"],
-                            font_color="white")
-        st.plotly_chart(fig_g, use_container_width=True)
+            if prob is None:
+                badge='<span class="badge-pend">PENDING</span>'; pt="—"
+            elif prob>0.5:
+                badge='<span class="badge-long">▲ LONG</span>'; pt=f"P↑{prob:.2f}"
+            else:
+                badge='<span class="badge-short">▼ SHORT</span>'; pt=f"P↑{prob:.2f}"
 
-    # News
-    if not t_sent.empty:
-        st.subheader("📰 Recent News")
-        recent = t_sent[["date","headline","sentiment_label",
-                          "sentiment_score"]].sort_values(
-                          "date", ascending=False).head(8)
-        for _, row in recent.iterrows():
-            emoji = sentiment_emoji(row["sentiment_label"])
-            score = row["sentiment_score"]
-            color = (COLORS["positive"] if score>0.1
-                     else COLORS["negative"] if score<-0.1
-                     else COLORS["neutral"])
             st.markdown(f"""
-<div style="padding:10px 14px;margin:4px 0;background:#1E2130;
-border-radius:8px;border-left:3px solid {color}">
-<span style="color:#8E9AAF;font-size:12px">{str(row['date'])[:10]}</span>
-&nbsp; {emoji} &nbsp;
-<span style="color:white">{row['headline']}</span>
-&nbsp; <span style="color:{color};font-size:12px">({score:+.3f})</span>
+<div class="sig-row">
+  <span class="sig-ticker">{t}</span>
+  <span class="sig-name">{nm}{pm}</span>
+  {badge}
+  <span class="sig-prob">{pt}</span>
+  <span class="sig-sent" style="color:{sc}">{ss:+.2f}</span>
 </div>""", unsafe_allow_html=True)
-    elif has_model_data:
-        st.info("No news data for this ticker. Run the crawler to fetch news.")
+
+    with heat_col:
+        st.markdown(f'<div class="sec">Sentiment Heatmap — Last 20 Trading Days</div>', unsafe_allow_html=True)
+        hm_src=hist_df[hist_df["ticker"].isin(TICKERS)][["ticker","date","sentiment_score"]].copy() if not hist_df.empty else pd.DataFrame()
+        if not hm_src.empty:
+            hm_src["date"]=pd.to_datetime(hm_src["date"]).dt.strftime("%Y-%m-%d")
+            pv=hm_src.groupby(["ticker","date"])["sentiment_score"].mean().reset_index().pivot(
+                index="ticker",columns="date",values="sentiment_score").fillna(0)
+            pv=pv.iloc[:,-20:]
+            pv.columns=[c[-5:] for c in pv.columns]
+            real_set=set(sent_df["ticker"].unique()) if not sent_df.empty else set()
+            pv.index=[f"{t}*" if t not in real_set else t for t in pv.index]
+            fig=px.imshow(pv,
+                color_continuous_scale=[[0,"#FF4560"],[0.5,C["card"]],[1,"#00E5A0"]],
+                zmin=-1, zmax=1, aspect="auto", text_auto=".1f")
+            fig.update_traces(textfont_size=10)
+            fig.update_layout(
+                height=max(320, len(TICKERS)*34),
+                paper_bgcolor=C["card"], plot_bgcolor=C["card"],
+                font_color=C["text"], font_size=11,
+                coloraxis_showscale=True,
+                coloraxis_colorbar=dict(
+                    thickness=12, len=0.8,
+                    tickfont=dict(size=10, color=C["sub"]),
+                    title=dict(text="", side="right"),
+                ),
+                margin=dict(l=0,r=8,t=0,b=0),
+                xaxis=dict(tickangle=-30, tickfont_size=10, side="bottom"),
+                yaxis=dict(tickfont_size=11),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("* Proxy model sentiment (no real news yet)")
+
+    # ── Bottom: Update + Stock Management ────────────────
+    st.markdown(f"<div style='height:1px;background:{C['border']};margin:20px 0'></div>", unsafe_allow_html=True)
+
+    bot_left, bot_mid, bot_right = st.columns([1.4, 1, 1], gap="large")
+
+    # Pipeline
+    with bot_left:
+        st.markdown(f'<div class="sec">Update Data & Models</div>', unsafe_allow_html=True)
+        if st.button("▶  Run Full Pipeline", type="primary", use_container_width=True):
+            root=os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+            pb=st.progress(0.0, text="Starting...")
+            slots=[st.empty() for _ in STEPS]
+            for i,(l,_) in enumerate(STEPS):
+                slots[i].markdown(f"<div style='font-size:12px;color:{C['muted']};padding:2px 0'>⬜ {l}</div>",unsafe_allow_html=True)
+            log,err=[],""
+            for i,(l,s) in enumerate(STEPS):
+                pb.progress(i/len(STEPS), text=f"{i+1}/{len(STEPS)}: {l}")
+                slots[i].markdown(f"<div style='font-size:12px;color:{C['orange']};padding:2px 0'>⏳ {l}</div>",unsafe_allow_html=True)
+                try:
+                    r=subprocess.run([sys.executable,s],capture_output=True,text=True,cwd=root,timeout=600)
+                    if r.returncode==0:
+                        slots[i].markdown(f"<div style='font-size:12px;color:{C['green']};padding:2px 0'>✅ {l}</div>",unsafe_allow_html=True)
+                        log.append(f"✅ {l}")
+                    else:
+                        e=r.stderr.strip().split("\n")[-1]
+                        slots[i].markdown(f"<div style='font-size:12px;color:{C['red']};padding:2px 0'>❌ {l}</div>",unsafe_allow_html=True)
+                        err=e; break
+                except Exception as ex:
+                    err=str(ex); break
+            if not err:
+                pb.progress(1.0, text="✅ Complete!")
+                st.success("Pipeline complete! Refreshing...")
+                st.cache_data.clear(); st.cache_resource.clear()
+            else:
+                st.error(f"Failed: {err}")
+            if log: st.code("\n".join(log), language=None)
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        step_c1, step_c2 = st.columns(2)
+        for i,(l,s) in enumerate(STEPS):
+            col = step_c1 if i%2==0 else step_c2
+            with col:
+                if st.button(l, use_container_width=True, key=f"ind_{s}"):
+                    root=os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
+                    with st.spinner("Running..."):
+                        r=subprocess.run([sys.executable,s],capture_output=True,text=True,cwd=root,timeout=600)
+                    if r.returncode==0: st.success("✅ Done!"); st.cache_data.clear()
+                    else: st.error(r.stderr.strip().split("\n")[-1])
+
+        if st.button("Clear Cache", use_container_width=True):
+            st.cache_data.clear(); st.cache_resource.clear()
+            st.success("Cleared!"); st.rerun()
+
+    # Active Stocks checkboxes
+    with bot_mid:
+        st.markdown(f'<div class="sec">Active Stocks</div>', unsafe_allow_html=True)
+        new_active=[]
+        for t in cfg["tickers"]:
+            nm=cfg["ticker_names"].get(t,"")
+            lbl=f"{t}  {nm}" if nm else t
+            if st.checkbox(lbl, value=t in cfg["active_tickers"], key=f"chk_{t}"):
+                new_active.append(t)
+        if set(new_active)!=set(cfg["active_tickers"]):
+            cfg["active_tickers"]=new_active; save_config(cfg); st.rerun()
+
+    # Add / Remove stock
+    with bot_right:
+        st.markdown(f'<div class="sec">Add New Stock</div>', unsafe_allow_html=True)
+        with st.form("add", clear_on_submit=True):
+            nt=st.text_input("Ticker", placeholder="e.g. NFLX").upper().strip()
+            nn=st.text_input("Company Name", placeholder="e.g. Netflix")
+            if st.form_submit_button("Add Stock", use_container_width=True):
+                if nt in cfg["tickers"]: st.warning(f"{nt} already exists")
+                elif not nt.isalpha() or len(nt)>6: st.error("Invalid ticker")
+                else:
+                    cfg["tickers"].append(nt); cfg["active_tickers"].append(nt)
+                    if nn: cfg["ticker_names"][nt]=nn
+                    save_config(cfg); st.success(f"✅ {nt} added — Run pipeline to activate"); st.rerun()
+
+        removable=[t for t in cfg["tickers"] if t not in
+                   ["AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","META","JPM","BAC","AMD"]]
+        if removable:
+            st.markdown(f'<div class="sec" style="margin-top:16px">Remove Stock</div>', unsafe_allow_html=True)
+            rc1, rc2 = st.columns([2,1])
+            rm=rc1.selectbox("Remove", removable, label_visibility="collapsed")
+            if rc2.button("Remove", use_container_width=True):
+                cfg["tickers"].remove(rm)
+                if rm in cfg["active_tickers"]: cfg["active_tickers"].remove(rm)
+                cfg["ticker_names"].pop(rm,None); save_config(cfg); st.rerun()
 
 
-# ════════════════════════════════════════════════════════════
-# PAGE 3 — Model Performance
-# ════════════════════════════════════════════════════════════
-elif page == "🤖 Model Performance":
-    st.title("🤖 Model Performance")
-    st.caption("XGBoost v2 vs LSTM — Out-of-sample test set (975 rows)")
 
-    xgb_res  = pd.DataFrame([
-        {"Horizon":"T+1d","Accuracy":0.5395,"F1":0.5198,"AUC-ROC":0.5416},
-        {"Horizon":"T+3d","Accuracy":0.5200,"F1":0.4742,"AUC-ROC":0.5666},
-        {"Horizon":"T+5d","Accuracy":0.5467,"F1":0.5562,"AUC-ROC":0.5687},
-    ])
-    lstm_res = pd.DataFrame([
-        {"Horizon":"T+1d","Accuracy":0.5500,"F1":0.5826,"AUC-ROC":0.5602},
-        {"Horizon":"T+3d","Accuracy":0.5333,"F1":0.5211,"AUC-ROC":0.5544},
-        {"Horizon":"T+5d","Accuracy":0.5603,"F1":0.6284,"AUC-ROC":0.5783},
-    ])
+elif page == "Analysis":
+    st.markdown('<div class="page-wrap">', unsafe_allow_html=True)
 
-    st.info("📌 **Realistic expectations**: 52~58% accuracy is good for financial prediction. "
-            "All models beat the random 50% baseline.")
-
-    metric = st.radio("Metric", ["Accuracy","F1","AUC-ROC"], horizontal=True)
-
-    fig_comp = go.Figure()
-    fig_comp.add_trace(go.Bar(
-        name="XGBoost v2", x=xgb_res["Horizon"], y=xgb_res[metric],
-        marker_color=COLORS["teal"],
-        text=xgb_res[metric].map(lambda x:f"{x:.4f}"),
-        textposition="outside",
-    ))
-    fig_comp.add_trace(go.Bar(
-        name="LSTM", x=lstm_res["Horizon"], y=lstm_res[metric],
-        marker_color=COLORS["orange"],
-        text=lstm_res[metric].map(lambda x:f"{x:.4f}"),
-        textposition="outside",
-    ))
-    fig_comp.add_hline(y=0.5, line_dash="dash", line_color="#8E9AAF",
-                       annotation_text="Random Baseline")
-    fig_comp.update_layout(barmode="group",
-                           yaxis=dict(range=[0.45,0.72]))
-    plotly_dark(fig_comp, height=400,
-                title=f"{metric}: XGBoost vs LSTM")
-    st.plotly_chart(fig_comp, use_container_width=True)
-
-    c1,c2 = st.columns(2)
-    with c1:
-        st.subheader("XGBoost v2")
-        st.dataframe(xgb_res.set_index("Horizon"), use_container_width=True)
-    with c2:
-        st.subheader("LSTM")
-        st.dataframe(lstm_res.set_index("Horizon"), use_container_width=True)
-
-    st.divider()
-    st.subheader("🏆 Winner by Metric")
-    w1,w2,w3 = st.columns(3)
-    w1.success("**T+1 AUC** → LSTM (0.5602 vs 0.5416)")
-    w2.warning("**T+3 AUC** → XGBoost (0.5666 vs 0.5544)")
-    w3.success("**T+5 AUC** → LSTM (0.5783 vs 0.5687)")
+    # ── Backtest first ────────────────────────────────────
+    st.markdown(f'<div class="sec">Backtest Results — Jan–Jun 2026 · $100k Capital · 0.1% Cost/Trade</div>',unsafe_allow_html=True)
 
 
-# ════════════════════════════════════════════════════════════
-# PAGE 4 — Backtest Results
-# ════════════════════════════════════════════════════════════
-elif page == "📈 Backtest Results":
-    st.title("📈 Backtest Results")
-    st.caption("Jan–Jun 2026 · $100k initial capital · 0.1% transaction cost")
-
-    bt_df = load_backtest()
     if bt_df.empty:
         st.warning("No backtest results. Run `backtest/run_backtest.py` first.")
-        st.stop()
+    else:
+        bh=bt_df[bt_df["strategy"]=="Buy & Hold"].iloc[0]
+        strs=bt_df[bt_df["strategy"]!="Buy & Hold"]
+        best=strs.loc[strs["sharpe"].idxmax()]
 
-    bh         = bt_df[bt_df["strategy"]=="Buy & Hold"].iloc[0]
-    strategies = bt_df[bt_df["strategy"]!="Buy & Hold"]
-    best       = strategies.loc[strategies["sharpe"].idxmax()]
+        b1,b2,b3,b4=st.columns(4)
+        for col,(lbl,val,sub,clr) in zip([b1,b2,b3,b4],[
+            ("Best Strategy",best["strategy"].split(".")[1].strip() if "." in best["strategy"] else best["strategy"],f"Sharpe {best['sharpe']:.2f}",C["teal"]),
+            ("Best Return",f"{strs['total_return'].max():+.1f}%",f"vs B&H {bh['total_return']:+.1f}%",C["green"]),
+            ("Best Sharpe",f"{strs['sharpe'].max():.2f}","risk-adjusted",C["orange"]),
+            ("Lowest Drawdown",f"{strs['max_drawdown'].max():.2f}%","least loss from peak",C["purple"]),
+        ]):
+            with col:
+                st.markdown(f'<div class="card-sm kpi"><div class="kpi-label">{lbl}</div><div class="kpi-value" style="font-size:20px">{val}</div><div class="kpi-sub" style="color:{clr}">{sub}</div></div>',unsafe_allow_html=True)
 
-    k1,k2,k3,k4 = st.columns(4)
-    k1.metric("Best Strategy",
-              best["strategy"].split(".")[1].strip()
-              if "." in best["strategy"] else best["strategy"],
-              f"Sharpe {best['sharpe']:.2f}")
-    k2.metric("Best Return",   f"{strategies['total_return'].max():+.1f}%",
-              f"vs B&H {bh['total_return']:+.1f}%")
-    k3.metric("Best Sharpe",   f"{strategies['sharpe'].max():.2f}")
-    k4.metric("Lowest Drawdown",
-              f"{strategies['max_drawdown'].max():.2f}%")
+        st.markdown("<br>",unsafe_allow_html=True)
+        sc={"1. Sentiment Long/Short":C["teal"],"2. Momentum + Sentiment":C["orange"],
+            "3. Mean Reversion":C["red"],"4. SNR + Sentiment":C["purple"],"Buy & Hold":C["muted"]}
 
-    st.divider()
+        bc1,bc2=st.columns(2,gap="large")
+        for col,(met,title,fmt) in zip([bc1,bc2],[
+            ("total_return","Total Return (%)","▲" ),
+            ("sharpe","Sharpe Ratio",""),
+        ]):
+            with col:
+                fig=go.Figure(go.Bar(
+                    x=bt_df["strategy"],y=bt_df[met],
+                    marker_color=[sc.get(s,C["teal"]) for s in bt_df["strategy"]],
+                    text=[f"{v:+.1f}%" if met=="total_return" else f"{v:.2f}" for v in bt_df[met]],
+                    textposition="outside"))
+                if met=="sharpe":
+                    fig.add_hline(y=1.0,line_dash="dash",line_color=C["muted"],annotation_text="1.0")
+                dark_chart(fig,280)
+                fig.update_layout(showlegend=False,xaxis=dict(tickangle=-15,tickfont_size=10),
+                    title=dict(text=title,font_size=12,font_color=C["sub"]))
+                st.plotly_chart(fig,use_container_width=True)
 
-    s_colors = {
-        "1. Sentiment Long/Short": COLORS["teal"],
-        "2. Momentum + Sentiment": COLORS["orange"],
-        "3. Mean Reversion":       COLORS["negative"],
-        "4. SNR + Sentiment":      COLORS["purple"],
-        "Buy & Hold":              COLORS["neutral"],
-    }
+        st.markdown(f'<div class="sec" style="margin-top:8px">Full Results Table</div>', unsafe_allow_html=True)
+        d=bt_df.copy()
+        d["total_return"]=d["total_return"].map(lambda x:f"{x:+.2f}%")
+        d["sharpe"]=d["sharpe"].map(lambda x:f"{x:.3f}")
+        d["max_drawdown"]=d["max_drawdown"].map(lambda x:f"{x:.2f}%")
+        d["win_rate"]=d["win_rate"].map(lambda x:f"{x:.1f}%")
+        st.dataframe(d.set_index("strategy"),use_container_width=True)
+        st.markdown(f"""
+<div style="background:rgba(255,159,28,0.08);border:1px solid rgba(255,159,28,0.25);
+border-radius:8px;padding:10px 16px;margin-top:12px;font-size:12px;color:{C['sub']}">
+⚠️ Sentiment proxy may introduce look-ahead bias. Past performance ≠ future results.
+</div>""", unsafe_allow_html=True)
 
-    c1,c2 = st.columns(2)
-    with c1:
-        fig_r = go.Figure(go.Bar(
-            x=bt_df["strategy"], y=bt_df["total_return"],
-            marker_color=[s_colors.get(s,COLORS["teal"])
-                          for s in bt_df["strategy"]],
-            text=[f"{v:+.1f}%" for v in bt_df["total_return"]],
-            textposition="outside",
-        ))
-        plotly_dark(fig_r, height=400, title="Total Return (%)")
-        fig_r.update_xaxes(tickangle=-20)
-        st.plotly_chart(fig_r, use_container_width=True)
+    st.markdown('<div class="hdiv"></div>',unsafe_allow_html=True)
 
-    with c2:
-        fig_s = go.Figure(go.Bar(
-            x=bt_df["strategy"], y=bt_df["sharpe"],
-            marker_color=[s_colors.get(s,COLORS["teal"])
-                          for s in bt_df["strategy"]],
-            text=[f"{v:.2f}" for v in bt_df["sharpe"]],
-            textposition="outside",
-        ))
-        fig_s.add_hline(y=1.0, line_dash="dash", line_color="#8E9AAF",
-                        annotation_text="Sharpe=1.0")
-        plotly_dark(fig_s, height=400, title="Sharpe Ratio")
-        fig_s.update_xaxes(tickangle=-20)
-        st.plotly_chart(fig_s, use_container_width=True)
+    # ── Models below ─────────────────────────────────────
+    st.markdown(f'<div class="sec">Model Performance — Out-of-Sample Test Set (975 rows)</div>', unsafe_allow_html=True)
 
-    fig_dd = go.Figure(go.Bar(
-        x=bt_df["strategy"], y=bt_df["max_drawdown"],
-        marker_color=[COLORS["negative"] if v<-5
-                      else COLORS["orange"] if v<-2
-                      else COLORS["positive"]
-                      for v in bt_df["max_drawdown"]],
-        text=[f"{v:.2f}%" for v in bt_df["max_drawdown"]],
-        textposition="outside",
-    ))
-    plotly_dark(fig_dd, height=320,
-                title="Max Drawdown (closer to 0% = better)")
-    fig_dd.update_xaxes(tickangle=-20)
-    st.plotly_chart(fig_dd, use_container_width=True)
+    xgb_r=pd.DataFrame([{"H":"T+1d","Acc":0.5395,"F1":0.5198,"AUC":0.5416},
+                         {"H":"T+3d","Acc":0.5200,"F1":0.4742,"AUC":0.5666},
+                         {"H":"T+5d","Acc":0.5467,"F1":0.5562,"AUC":0.5687}])
+    lstm_r=pd.DataFrame([{"H":"T+1d","Acc":0.5500,"F1":0.5826,"AUC":0.5602},
+                          {"H":"T+3d","Acc":0.5333,"F1":0.5211,"AUC":0.5544},
+                          {"H":"T+5d","Acc":0.5603,"F1":0.6284,"AUC":0.5783}])
 
-    st.subheader("Full Results Table")
-    disp = bt_df.copy()
-    disp["total_return"] = disp["total_return"].map(lambda x:f"{x:+.2f}%")
-    disp["sharpe"]       = disp["sharpe"].map(lambda x:f"{x:.3f}")
-    disp["max_drawdown"] = disp["max_drawdown"].map(lambda x:f"{x:.2f}%")
-    disp["win_rate"]     = disp["win_rate"].map(lambda x:f"{x:.1f}%")
-    st.dataframe(disp.set_index("strategy"), use_container_width=True)
+    mc1,mc2,mc3=st.columns(3)
+    metric=mc1.radio("Metric",["Acc","F1","AUC"],horizontal=True)
+    metric_full={"Acc":"Accuracy","F1":"F1 Score","AUC":"AUC-ROC"}[metric]
 
-    st.divider()
-    st.warning("⚠️ **Disclaimer**: Sentiment proxy model may introduce look-ahead bias. "
-               "Past performance ≠ future results. 0.1% transaction cost included.")
+    m_left,m_right=st.columns([1.6,1],gap="large")
+
+    with m_left:
+        fig=go.Figure()
+        fig.add_trace(go.Bar(name="XGBoost v2",x=xgb_r["H"],y=xgb_r[metric],
+            marker_color=C["teal"],text=xgb_r[metric].map(lambda x:f"{x:.4f}"),textposition="outside"))
+        fig.add_trace(go.Bar(name="LSTM",x=lstm_r["H"],y=lstm_r[metric],
+            marker_color=C["orange"],text=lstm_r[metric].map(lambda x:f"{x:.4f}"),textposition="outside"))
+        fig.add_hline(y=0.5,line_dash="dash",line_color=C["muted"],annotation_text="Random 50%",annotation_font_color=C["sub"])
+        fig.update_layout(barmode="group",yaxis=dict(range=[0.45,0.70]))
+        dark_chart(fig,320)
+        fig.update_layout(title=dict(text=f"{metric_full}: XGBoost vs LSTM",font_size=12,font_color=C["sub"]))
+        st.plotly_chart(fig,use_container_width=True)
+
+    with m_right:
+        st.markdown(f'<div class="sec">Results Table</div>',unsafe_allow_html=True)
+        combined=pd.DataFrame([
+            {"Model":"XGBoost","Horizon":"T+1d","Accuracy":0.5395,"F1":0.5198,"AUC-ROC":0.5416},
+            {"Model":"XGBoost","Horizon":"T+3d","Accuracy":0.5200,"F1":0.4742,"AUC-ROC":0.5666},
+            {"Model":"XGBoost","Horizon":"T+5d","Accuracy":0.5467,"F1":0.5562,"AUC-ROC":0.5687},
+            {"Model":"LSTM",   "Horizon":"T+1d","Accuracy":0.5500,"F1":0.5826,"AUC-ROC":0.5602},
+            {"Model":"LSTM",   "Horizon":"T+3d","Accuracy":0.5333,"F1":0.5211,"AUC-ROC":0.5544},
+            {"Model":"LSTM",   "Horizon":"T+5d","Accuracy":0.5603,"F1":0.6284,"AUC-ROC":0.5783},
+        ])
+        st.dataframe(combined.set_index(["Model","Horizon"]),use_container_width=True)
+        st.markdown("<br>",unsafe_allow_html=True)
+        st.success("**T+1 & T+5** → LSTM wins")
+        st.warning("**T+3** → XGBoost wins")
+        st.info("📌 52–58% AUC beats random baseline")
+
+
+# ════════════════════════════════════════════════════════════
+# DEEP DIVE
+# ════════════════════════════════════════════════════════════
+
+elif page == "Deep Dive":
+    st.markdown('<div class="page-wrap">', unsafe_allow_html=True)
+    dc1,dc2,dc3=st.columns([1,1,2])
+    ticker=dc1.selectbox("Stock",TICKERS)
+    horizon=dc2.selectbox("Horizon",["T+1 Tomorrow","T+3 (3 Days)","T+5 (5 Days)"])
+    lc={"T+1 Tomorrow":"label_1d","T+3 (3 Days)":"label_3d","T+5 (5 Days)":"label_5d"}[horizon]
+
+    t_hist=hist_df[hist_df["ticker"]==ticker].sort_values("date") if not hist_df.empty else pd.DataFrame()
+    t_sent=sent_df[sent_df["ticker"]==ticker].sort_values("date") if not sent_df.empty else pd.DataFrame()
+    prob=get_prob(hist_df,xgb_mdls,ticker,lc)
+
+    # Banner
+    if prob is not None:
+        il=prob>0.5
+        sig="▲  LONG  —  Price likely to rise" if il else "▼  SHORT  —  Price likely to fall"
+        bc=C["green"] if il else C["red"]
+        conf="High" if abs(prob-.5)>.15 else "Medium" if abs(prob-.5)>.07 else "Low"
+        st.markdown(f"""
+<div style="background:rgba({'0,229,160' if il else '255,69,96'},.07);
+border:1px solid {bc};border-radius:10px;padding:12px 20px;margin-bottom:16px;
+display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:17px;font-weight:700;color:{bc}">{sig}</span>
+<span style="font-size:12px;color:{C['sub']}">
+  {horizon} · P(UP)={prob:.3f} · P(DOWN)={1-prob:.3f} ·
+  <span style="color:{C['orange']}">Confidence: {conf}</span>
+</span>
+</div>""",unsafe_allow_html=True)
+
+    ch_col, info_col = st.columns([2.2, 1], gap="large")
+
+    with ch_col:
+        if not t_hist.empty:
+            fig=make_subplots(rows=3,cols=1,shared_xaxes=True,
+                              row_heights=[0.55,0.22,0.23],
+                              subplot_titles=[f"{ticker}  Price + SMA20","FinBERT Sentiment","RSI (14)"],
+                              vertical_spacing=0.05)
+            fig.add_trace(go.Scatter(x=t_hist["date"],y=t_hist["close"],
+                name="Price",line=dict(color=C["teal"],width=2)),row=1,col=1)
+            if "sma20" in t_hist.columns:
+                fig.add_trace(go.Scatter(x=t_hist["date"],y=t_hist["sma20"],
+                    name="SMA20",line=dict(color=C["orange"],width=1,dash="dash")),row=1,col=1)
+            sd=t_hist[["date","sentiment_score"]].dropna()
+            fig.add_trace(go.Bar(x=sd["date"],y=sd["sentiment_score"],name="Sentiment",
+                marker_color=[C["green"] if s>0 else C["red"] for s in sd["sentiment_score"]]),row=2,col=1)
+            if "rsi14" in t_hist.columns:
+                fig.add_trace(go.Scatter(x=t_hist["date"],y=t_hist["rsi14"],
+                    name="RSI",line=dict(color=C["purple"],width=1.5)),row=3,col=1)
+                fig.add_hrect(y0=70,y1=100,fillcolor="#FF4560",opacity=0.06,line_width=0,row=3,col=1)
+                fig.add_hrect(y0=0, y1=30, fillcolor="#00E5A0",opacity=0.06,line_width=0,row=3,col=1)
+                fig.add_hline(y=70,line_dash="dash",line_color=C["red"],  line_width=1,row=3,col=1)
+                fig.add_hline(y=30,line_dash="dash",line_color=C["green"],line_width=1,row=3,col=1)
+            dark_chart(fig,620); st.plotly_chart(fig,use_container_width=True)
+
+    with info_col:
+        # Gauge
+        if prob is not None:
+            fig_g=go.Figure(go.Indicator(
+                mode="gauge+number+delta",value=prob*100,
+                delta={"reference":50,"suffix":"%"},
+                title={"text":f"P(UP) — {horizon}","font":{"color":C["text"],"size":12}},
+                number={"suffix":"%","font":{"color":C["text"],"size":28}},
+                gauge={"axis":{"range":[0,100],"tickcolor":C["sub"],"tickfont":{"color":C["sub"],"size":9}},
+                       "bar":{"color":C["teal"]},"bgcolor":C["card2"],"bordercolor":C["border"],
+                       "steps":[{"range":[0,40],"color":"rgba(255,69,96,.12)"},
+                                 {"range":[40,60],"color":"rgba(75,98,128,.08)"},
+                                 {"range":[60,100],"color":"rgba(0,229,160,.12)"}],
+                       "threshold":{"line":{"color":"white","width":2},"value":50}},
+            ))
+            fig_g.update_layout(height=220,paper_bgcolor=C["card"],font_color=C["text"],margin=dict(l=16,r=16,t=28,b=0))
+            st.plotly_chart(fig_g,use_container_width=True)
+
+        # News
+        st.markdown(f'<div class="sec">Recent News</div>',unsafe_allow_html=True)
+        if not t_sent.empty:
+            for _,row in t_sent.sort_values("date",ascending=False).head(10).iterrows():
+                sc=row["sentiment_score"]
+                sc_c=sent_col(sc)
+                st.markdown(f"""
+<div class="nitem">
+  <span class="ndate">{str(row['date'])[:10]}</span>
+  <div class="nhead">{row['headline'][:110]}{"…" if len(row['headline'])>110 else ""}</div>
+  <span style="font-size:10px;font-weight:600;color:{sc_c}">{sc:+.3f}</span>
+</div>""",unsafe_allow_html=True)
+        else:
+            st.markdown(f'<p style="color:{C["sub"]};font-size:12px">No news. Run the crawler.</p>',unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)

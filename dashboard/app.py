@@ -338,6 +338,11 @@ with st.sidebar:
                     st.error(f"❌ {err}")
 
     st.divider()
+    if st.button("🗑️ Clear Cache & Reload", use_container_width=True):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success("Cache cleared!")
+        st.rerun()
     st.caption("Data: Yahoo Finance + NewsAPI")
     st.caption("Model: FinBERT + XGBoost + LSTM")
 
@@ -457,23 +462,53 @@ if page == "📊 Market Overview":
 
     st.divider()
 
-    # Heatmap
+    # Heatmap — use dataset_historical.csv to include all tickers
     st.subheader("Sentiment Heatmap — Last 20 Trading Days")
-    hm = (sent_df.groupby(["ticker","date"])["sentiment_score"]
-                 .mean().reset_index())
-    hm_pivot = hm.pivot(index="ticker", columns="date",
-                        values="sentiment_score").fillna(0)
-    hm_pivot = hm_pivot.iloc[:, -20:]
-    hm_pivot.columns = [str(c)[:10] for c in hm_pivot.columns]
+    st.caption("🟢 Positive  ⬛ Neutral  🔴 Negative · Scores from FinBERT (real news) or proxy model")
 
-    fig_heat = px.imshow(
-        hm_pivot,
-        color_continuous_scale=[[0,"#FF4B4B"],[0.5,"#1E2130"],[1,"#00C896"]],
-        zmin=-1, zmax=1, aspect="auto", text_auto=".2f",
-    )
-    fig_heat.update_traces(textfont_size=9)
-    plotly_dark(fig_heat, height=max(300, len(TICKERS)*35))
-    st.plotly_chart(fig_heat, use_container_width=True)
+    # Use historical dataset which covers all tickers including new ones
+    hm_source = hist_df[hist_df["ticker"].isin(TICKERS)][
+        ["ticker", "date", "sentiment_score"]
+    ].copy() if not hist_df.empty else pd.DataFrame()
+
+    # Fall back to sentiment CSV if historical not available
+    if hm_source.empty and not sent_df.empty:
+        hm_source = sent_df[sent_df["ticker"].isin(TICKERS)][
+            ["ticker", "date", "sentiment_score"]
+        ].copy()
+
+    if not hm_source.empty:
+        hm_source["date"] = pd.to_datetime(hm_source["date"]).dt.strftime("%Y-%m-%d")
+
+        # Daily average per ticker
+        hm = (hm_source.groupby(["ticker", "date"])["sentiment_score"]
+                       .mean().reset_index())
+        hm_pivot = hm.pivot(index="ticker", columns="date",
+                            values="sentiment_score")
+
+        # Keep last 20 trading days, fill missing with 0
+        hm_pivot = hm_pivot.fillna(0).iloc[:, -20:]
+        hm_pivot.columns = [str(c)[:10] for c in hm_pivot.columns]
+
+        # Mark tickers with real news vs proxy model
+        real_tickers  = set(sent_df["ticker"].unique()) if not sent_df.empty else set()
+        ticker_labels = []
+        for t in hm_pivot.index:
+            label = t if t in real_tickers else f"{t} *"
+            ticker_labels.append(label)
+        hm_pivot.index = ticker_labels
+
+        fig_heat = px.imshow(
+            hm_pivot,
+            color_continuous_scale=[[0,"#FF4B4B"],[0.5,"#1E2130"],[1,"#00C896"]],
+            zmin=-1, zmax=1, aspect="auto", text_auto=".2f",
+        )
+        fig_heat.update_traces(textfont_size=9)
+        plotly_dark(fig_heat, height=max(300, len(TICKERS)*38))
+        st.plotly_chart(fig_heat, use_container_width=True)
+        st.caption("\* Sentiment estimated by proxy model (no real news data yet)")
+    else:
+        st.info("No sentiment data available.")
 
 
 # ════════════════════════════════════════════════════════════

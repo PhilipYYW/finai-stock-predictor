@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# FinAI Project
+data/
+models/
+*.pkl
+*.pt
+*.bin
+*.csv
+*.h5
+config.json
